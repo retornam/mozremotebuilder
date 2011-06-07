@@ -145,18 +145,17 @@ def cli():
     #Call the commit bisector!
     bisector = CommitBisector(options.good, options.bad, byChangeset=options.byChangeset)
 
-    #bisector2 = CommitBisector("780fb17abc1ef6ef1660b7bfbc26597749b7c7fe", "fd50260987f4f80b5eebedc7d4d0f4b55d85684f", byChangeset=1)
-    #for changeset in bisector2.getChangesets():
-    #    print changeset
-
     while(bisector.done == 0):
         print "Testing changeset " + bisector.nextChangeset()
-        #call server with commit to be built, wait for build
-        #get binary from server
-        #run binary
+
         if bisector.nextChangeset() == options.bad:
+            # Handle edge case, if user's input has difference 0
             bisector.bisectLog(verdict="bad")
         else:
+            #TODO: CALL SERVER HERE!
+            #call server with commit to be built, wait for build (BLOCKING)
+            #get binary from server (BLOCKING)
+            #run binary with mozrunner (non-blocking)
             verdict = ""
             while verdict != 'good' and verdict != 'bad' and verdict != 'b' and verdict != 'g':
                 verdict = raw_input("Was this changeset good or bad? (type 'good' or 'bad' and press Enter): ")
