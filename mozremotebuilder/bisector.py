@@ -156,10 +156,9 @@ def cli():
             caller = BuildCaller(host="ambushnetworks.com",port=9999,data=bisector.nextChangeset())
             response = caller.getURL()
             print response
-            #TODO: CALL SERVER HERE!
-            #call server with commit to be built, wait for build (BLOCKING)
-            #get binary from server (BLOCKING)
-            #run binary with mozrunner (non-blocking)
+
+            #TODO: download from URL, run using mozrunner
+
             verdict = ""
             while verdict != 'good' and verdict != 'bad' and verdict != 'b' and verdict != 'g':
                 verdict = raw_input("Was this changeset good or bad? (type 'good' or 'bad' and press Enter): ")
