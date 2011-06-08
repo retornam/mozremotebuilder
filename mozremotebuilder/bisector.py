@@ -51,7 +51,8 @@ class CommitBisector():
         self.right = 0
         self.good = good
         self.bad = bad
-        self.log = deque([])
+        #self.log = deque([])
+        self.log = []
         self.byChangeset = byChangeset
         self.fetchPushlog(good, bad, byChangeset)
         self.done = 0
@@ -74,7 +75,7 @@ class CommitBisector():
 
         dom = minidom.parse(urllib.urlopen(pushlog_url))
 
-        changesets = deque([])
+        changesets = [] #deque([])
         for node in dom.getElementsByTagNameNS('http://www.w3.org/2005/Atom','title'):
             changeset = node.childNodes[0].data
             hash = changeset.split(" ")[1]
@@ -86,7 +87,7 @@ class CommitBisector():
                                         #threw off my algo. off-by-one errors ftl
 
         if(len(changesets) > 0):
-            changesets.popleft()        #HACK parsing -- eliminate extra "pushlog" text tag.
+            changesets.pop(0)        #HACK parsing -- eliminate extra "pushlog" text tag.
         else:
             print "\nError: invalid date or commit range"
             sys.exit()
@@ -128,6 +129,25 @@ class CommitBisector():
         self.done = 0
         return None
 
+    def go(self):
+        while(self.done == 0):
+            print "Testing changeset " + self.nextChangeset()
+
+            if self.nextChangeset() == self.bad:
+                # Handle edge case, if user's input has difference 0
+                self.bisectLog(verdict="bad")
+            else:
+                caller = BuildCaller(host="ambushnetworks.com",port=9999,data=self.nextChangeset())
+                response = caller.getURL()
+                print response
+
+                #TODO: download from URL, run using mozrunner
+
+                verdict = ""
+                while verdict != 'good' and verdict != 'bad' and verdict != 'b' and verdict != 'g':
+                    verdict = raw_input("Was this changeset good or bad? (type 'good' or 'bad' and press Enter): ")
+                self.bisectLog(verdict=verdict)
+
 
 def cli():
     parser = OptionParser()
@@ -145,24 +165,8 @@ def cli():
 
     #Call the commit bisector!
     bisector = CommitBisector(options.good, options.bad, byChangeset=options.byChangeset)
+    bisector.go()
 
-    while(bisector.done == 0):
-        print "Testing changeset " + bisector.nextChangeset()
-
-        if bisector.nextChangeset() == options.bad:
-            # Handle edge case, if user's input has difference 0
-            bisector.bisectLog(verdict="bad")
-        else:
-            caller = BuildCaller(host="ambushnetworks.com",port=9999,data=bisector.nextChangeset())
-            response = caller.getURL()
-            print response
-
-            #TODO: download from URL, run using mozrunner
-
-            verdict = ""
-            while verdict != 'good' and verdict != 'bad' and verdict != 'b' and verdict != 'g':
-                verdict = raw_input("Was this changeset good or bad? (type 'good' or 'bad' and press Enter): ")
-            bisector.bisectLog(verdict=verdict)
 
 if __name__ == "__main__":
     cli()
