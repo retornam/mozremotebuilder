@@ -44,7 +44,7 @@ from caller import BuildCaller
 
 
 class CommitBisector():
-    def __init__(self, good, bad, byChangeset=0):
+    def __init__(self, good, bad, byChangeset=0, host="localhost", port=9999):
         #if byChangeset = 0, good is the startdate, bad is the enddate
         #if byChangeset = 1, good is the good changeset, bad is the bad changeset
         self.left = 0
@@ -56,6 +56,8 @@ class CommitBisector():
         self.byChangeset = byChangeset
         self.fetchPushlog(good, bad, byChangeset)
         self.done = 0
+        self.host = host
+        self.port = port
 
     def getChangesets(self):
         #Wrapper function: fetch pushlog if it doesn't exist, otherwise return existing log.
@@ -137,7 +139,7 @@ class CommitBisector():
                 # Handle edge case, if user's input has difference 0
                 self.bisectLog(verdict="bad")
             else:
-                caller = BuildCaller(host="ambushnetworks.com",port=9999,data=self.nextChangeset())
+                caller = BuildCaller(host=self.host,port=self.port,data=self.nextChangeset())
                 response = caller.getURL()
                 print response
 
