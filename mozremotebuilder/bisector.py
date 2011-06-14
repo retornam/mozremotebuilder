@@ -33,20 +33,47 @@
 #
 # ***** END LICENSE BLOCK *****
 
-import urllib
-import math
+from caller import BuildCaller
+from utils import strsplit, download_url, get_date, get_platform
 from xml.dom import minidom
 from collections import deque
 from optparse import OptionParser
-import datetime
-import sys
-from caller import BuildCaller
-
-from utils import strsplit, download_url, get_date, get_platform
 
 from mozrunner import FirefoxProfile
 from mozrunner import ThunderbirdProfile
 from mozrunner import Runner
+
+#For monitoring if build is done via Pulse
+from threading import Thread, Condition
+from pulsebuildmonitor import PulseBuildMonitor
+
+from multiprocessing import Queue
+
+import simplejson as json
+import os, socket, urllib, math, datetime, sys
+
+#Condition Variable for knowing if a new try build has completed
+cv = Condition()
+lastCompleted = Queue()
+
+
+class BuildMonitor(PulseBuildMonitor, Thread):
+    '''
+    This class needs to signal via condition variable that our build is done
+    '''
+    def __init__(self, logger=None, port=8034, **kwargs):
+        self.logger = logger
+        self.port = port
+        self.builds = {}
+        PulseBuildMonitor.__init__(self, logger=self.logger, **kwargs)
+        Thread.__init__(self)
+
+    def onBuildComplete(self, builddata):
+        print "DEBUG: "+ builddata['buildurl']
+        cv.acquire()
+        lastCompleted.put(builddata['buildurl'])
+        notifyAll() #let thread know that a build came in!
+        cv.release()
 
 
 class CommitBisector():
@@ -57,7 +84,6 @@ class CommitBisector():
         self.right = 0
         self.good = good
         self.bad = bad
-        #self.log = deque([])
         self.log = []
         self.byChangeset = byChangeset
         self.fetchPushlog(good, bad, byChangeset)
@@ -81,6 +107,7 @@ class CommitBisector():
             pushlog_url = 'http://hg.mozilla.org/mozilla-central/pushlog?startdate=' + good + '&enddate=' + bad
             print "Fetching changesets from "+pushlog_url+"\n"
 
+        #Parsing XML. TODO: CHANGE TO JSON
         dom = minidom.parse(urllib.urlopen(pushlog_url))
 
         changesets = [] #deque([])
@@ -150,6 +177,14 @@ class CommitBisector():
 
 
     def go(self):
+        #First, set up the listener for Pulse in another thread
+        monitor = BuildMonitor(tree=['try'], label='woo@mozilla.com|latest_build_monitor_' + socket.gethostname())
+        monitor.start()
+        monitor_thread = Thread(target=monitor.listen)
+        monitor_thread.setDaemon(True)
+        monitor_thread.start()
+
+        #Call the commit bisector!
         while(self.done == 0):
             print "Testing changeset " + self.nextChangeset()
 
@@ -158,8 +193,20 @@ class CommitBisector():
                 self.bisectLog(verdict="bad")
             else:
                 caller = BuildCaller(host=self.host,port=self.port,data=self.nextChangeset())
-                response = caller.getURL()
-                print response
+                response = caller.getChangeset() #should return changeset of try commit
+
+                #Condition should be when you can parse response from the url string
+                #When condition is met (our download URL is available) go get it!! :)
+                print "Waiting for " + response + " to show up in the build log..."
+
+                cv.acquire()
+                downloadURL = lastCompleted.get()
+                while downloadURL.count(response) < 1:
+                    print "Waiting for " + response + " to show up in the build log..."
+                cv.wait()
+                cv.release()
+
+                print downloadURL + " is the URL we need to download from! yep."
 
                 #self.download(url=None, dest=self.cacheDir)
                 #unzip the binary? o.o figure out what's going on here
@@ -206,7 +253,7 @@ def cli():
         options.good = str(datetime.date.today())
         print "No 'good' date specified, using " + options.good
 
-    #Call the commit bisector!
+
     bisector = CommitBisector(options.good, options.bad, byChangeset=options.byChangeset)
     bisector.go()
 

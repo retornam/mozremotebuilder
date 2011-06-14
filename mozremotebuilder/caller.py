@@ -24,18 +24,17 @@ class BuildCaller():
     def getResponse(self):
         # Receive response data from the builder's socket server
         # Server sends (2) responses, first an ack after queue'ing
-        # the changeset and the second is the url to the built binary
+        # the changeset and the second is the built changeset
         confirm = self.sock.recv(1024)
-        print confirm
 
-        url = self.sock.recv(1024)
+        changeset = self.sock.recv(1024)
         self.sock.close()
         # print "Sent:     %s" % self.data
         # print "Received: %s" % received
-        return url
+        return changeset
 
-    def getURL(self):
-        # Returns URL of built binary
+    def getChangeset(self):
+        # Returns response from server
         self.send()
         print "Sent request for changeset " + self.data
         print "Waiting for response from server..."
@@ -54,7 +53,7 @@ def cli():
 
     caller = BuildCaller(host=options.hostname, port=options.port, data=options.changeset)
 
-    response = caller.getURL()
+    response = caller.getChangeset()
     print response
 
 if __name__ == "__main__":
