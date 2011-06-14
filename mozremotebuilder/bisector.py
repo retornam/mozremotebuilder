@@ -42,6 +42,12 @@ import datetime
 import sys
 from caller import BuildCaller
 
+from utils import strsplit, download_url, get_date, get_platform
+
+from mozrunner import FirefoxProfile
+from mozrunner import ThunderbirdProfile
+from mozrunner import Runner
+
 
 class CommitBisector():
     def __init__(self, good, bad, byChangeset=0, host="localhost", port=9999):
@@ -131,6 +137,18 @@ class CommitBisector():
         self.done = 0
         return None
 
+    def download(self, url=None, dest=None):
+        if url:
+            if not dest:
+                dest = os.path.basename(url)
+            print "\nDownloading build...\n"
+            download_url(url, dest) #see utils module
+            self.dest = dest
+            return True
+        else:
+            return False
+
+
     def go(self):
         while(self.done == 0):
             print "Testing changeset " + self.nextChangeset()
@@ -143,7 +161,30 @@ class CommitBisector():
                 response = caller.getURL()
                 print response
 
+                #self.download(url=None, dest=self.cacheDir)
+                #unzip the binary? o.o figure out what's going on here
+
+
                 #TODO: download from URL, run using mozrunner
+                #Download should save into ~/mozremotebuilder ??
+                #Unzip, call mozrunner on the binary
+                    #Run the built binary
+                if sys.platform == "darwin":
+                    #runner = FirefoxRunner(binary=os.path.join(self.cacheDir,"obj-ff-dbg","dist","Nightly.app","Contents","MacOS")+"/firefox-bin")
+                    #runner.start()
+                    pass
+                elif sys.platform == "linux2":
+                    #runner = FirefoxRunner(binary=os.path.join(self.cacheDir,"obj-ff-dbg","dist","bin") + "/firefox")
+                    #runner.start()
+                    pass
+                elif sys.platform == "win32" or sys.platform == "cygwin":
+                    #runner = FirefoxRunner(binary=os.path.join(self.cacheDir,"obj-ff-dbg","dist","bin") + "/firefox.exe")
+                    #runner.start()
+                    pass
+                else:
+                    print "Your platform is not currently supported."
+                    quit()
+
 
                 verdict = ""
                 while verdict != 'good' and verdict != 'bad' and verdict != 'b' and verdict != 'g':
