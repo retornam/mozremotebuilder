@@ -50,7 +50,11 @@ from pulsebuildmonitor import PulseBuildMonitor
 from multiprocessing import Queue
 
 import simplejson as json
-import os, socket, urllib, math, datetime, sys
+import os, socket, urllib, math, datetime, sys, shutil
+
+from mozrunner import Runner, FirefoxRunner
+from mozInstall import MozInstaller
+from mozInstall import rmdirRecursive
 
 #Condition Variable for knowing if a new try build has completed
 cv = Condition()
@@ -80,6 +84,34 @@ class BuildMonitor(PulseBuildMonitor, Thread):
         cv.release()
 
 
+class FFRunner():
+    def __init__(self, name="firefox", installDir=os.path.join(os.path.expanduser("~"),"remotebisectorapp")):
+        self.name = name
+        platform=get_platform()
+        if platform['name'] == "Windows":
+            if platform['bits'] == '64':
+                print "No builds available for 64 bit Windows"
+                sys.exit()
+            self.buildRegex = ".*win32.zip"
+            self.processName = self.name + ".exe"
+            self.binary = os.path.join(installDir, self.name, self.name + ".exe")
+        elif platform['name'] == "Linux":
+            self.processName = self.name + "-bin"
+            self.binary = os.path.join(installDir, self.name, self.name)
+            if platform['bits'] == '64':
+                self.buildRegex = ".*linux-x86_64.tar.bz2"
+            else:
+                self.buildRegex = ".*linux-i686.tar.bz2"
+        elif platform['name'] == "Mac":
+            self.buildRegex = ".*mac.*\.dmg"
+            self.processName = self.name + "-bin"
+            self.binary = os.path.join(installDir, "Mozilla.app/Contents/MacOS", self.name + "-bin")
+
+    def run(self):
+        self.runner = FirefoxRunner(binary=self.binary)
+        self.runner.start()
+
+
 class CommitBisector():
     def __init__(self, good, bad, byChangeset=0, host="localhost", port=9999):
         #if byChangeset = 0, good is the startdate, bad is the enddate
@@ -94,7 +126,7 @@ class CommitBisector():
         self.done = 0
         self.host = host
         self.port = port
-        self.platform = "macosx64" #STUB
+        self.platform = "macosx64"
 
     def getChangesets(self):
         #Wrapper function: fetch pushlog if it doesn't exist, otherwise return existing log.
@@ -212,30 +244,44 @@ class CommitBisector():
 
                 print downloadURL + " is the URL we need to download from! yep."
 
-                #self.download(url=None, dest=self.cacheDir)
-                #unzip the binary? o.o figure out what's going on here
+                """
+                TODO
+                1) Download URL
+                2) MozInstall install it
+                3) Run with MozRunner
 
-
-                #TODO: download from URL, run using mozrunner
-                #Download should save into ~/mozremotebuilder ??
-                #Unzip, call mozrunner on the binary
-                    #Run the built binary
-                if sys.platform == "darwin":
-                    #runner = FirefoxRunner(binary=os.path.join(self.cacheDir,"obj-ff-dbg","dist","Nightly.app","Contents","MacOS")+"/firefox-bin")
-                    #runner.start()
-                    pass
-                elif sys.platform == "linux2":
-                    #runner = FirefoxRunner(binary=os.path.join(self.cacheDir,"obj-ff-dbg","dist","bin") + "/firefox")
-                    #runner.start()
-                    pass
-                elif sys.platform == "win32" or sys.platform == "cygwin":
-                    #runner = FirefoxRunner(binary=os.path.join(self.cacheDir,"obj-ff-dbg","dist","bin") + "/firefox.exe")
-                    #runner.start()
-                    pass
+                4) Make platform detection automatic...
+                """
+                #First, make place for it to be downloaded
+                downloadDirectory = os.path.join(os.path.expanduser("~"), "remotebisectorapp")
+                if not os.path.exists(downloadDirectory):
+                    os.mkdir(downloadDirectory)
                 else:
-                    print "Your platform is not currently supported."
-                    quit()
+                    #Make clean each time because we don't know if a file was already downloaded
+                    shutil.rmtree(downloadDirectory)
+                    os.mkdir(downloadDirectory)
 
+                #Second, download it
+                downloadedFile = os.path.join(downloadDirectory,os.path.basename(downloadURL))
+                self.download(url=downloadURL,dest=downloadedFile)
+
+                #Third, call MozInstall on it
+                try:
+                    #installer = MozInstaller(src = downloadedFile, dest = downloadDirectory,
+                    #                         branch = "1.9", productName = "firefox")
+                    MozInstaller(src=downloadedFile, dest=downloadDirectory, dest_app="Mozilla.app")
+                except:
+                    print "Install failed. Marking as bad."
+                    self.bisectLog(verdict="bad")
+                    continue
+
+                try:
+                    runner = FFRunner(installDir=downloadDirectory)
+                    runner.run()
+                except:
+                    print "Failed to start firefox. You can manually start it from the remotebisectorapp directory."
+                    #Graceful failure of the runner -- ask the user to run it themselves. Uhgh.
+                    pass
 
                 verdict = ""
                 while verdict != 'good' and verdict != 'bad' and verdict != 'b' and verdict != 'g':
