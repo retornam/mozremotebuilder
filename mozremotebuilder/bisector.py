@@ -69,10 +69,14 @@ class BuildMonitor(PulseBuildMonitor, Thread):
         Thread.__init__(self)
 
     def onBuildComplete(self, builddata):
-        print "DEBUG: "+ builddata['buildurl']
+        print "=============================="
+        print "DEBUG: "+ str(builddata['buildurl'])
+        print json.dumps(builddata)
+        print "=============================="
+
+        lastCompleted.put(str(builddata['buildurl']))
         cv.acquire()
-        lastCompleted.put(builddata['buildurl'])
-        notifyAll() #let thread know that a build came in!
+        cv.notifyAll() #let thread know that a build came in!
         cv.release()
 
 
@@ -90,6 +94,7 @@ class CommitBisector():
         self.done = 0
         self.host = host
         self.port = port
+        self.platform = "macosx64" #STUB
 
     def getChangesets(self):
         #Wrapper function: fetch pushlog if it doesn't exist, otherwise return existing log.
@@ -192,18 +197,17 @@ class CommitBisector():
                 # Handle edge case, if user's input has difference 0
                 self.bisectLog(verdict="bad")
             else:
-                caller = BuildCaller(host=self.host,port=self.port,data=self.nextChangeset())
+                caller = BuildCaller(host=self.host,port=self.port,data=self.nextChangeset(),platform=self.platform)
                 response = caller.getChangeset() #should return changeset of try commit
 
-                #Condition should be when you can parse response from the url string
-                #When condition is met (our download URL is available) go get it!! :)
                 print "Waiting for " + response + " to show up in the build log..."
 
                 cv.acquire()
                 downloadURL = lastCompleted.get()
                 while downloadURL.count(response) < 1:
                     print "Waiting for " + response + " to show up in the build log..."
-                cv.wait()
+                    cv.wait()
+                    downloadURL = lastCompleted.get()
                 cv.release()
 
                 print downloadURL + " is the URL we need to download from! yep."

@@ -7,7 +7,7 @@ import sys
 from optparse import OptionParser
 
 class BuildCaller():
-    def __init__(self, host="localhost", port=9999, data="1"):
+    def __init__(self, host="localhost", port=9999, data="1",platform="macosx64"):
         self.host = host
         self.port = port
 
