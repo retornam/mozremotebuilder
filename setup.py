@@ -14,10 +14,10 @@ setup(name="mozremotebuilder",
       packages=find_packages(exclude=['legacy']),
       entry_points="""
           [console_scripts]
-          mozremotebuild = mozremotebuilder:callercli
+          mozremotebisect = mozremotebuilder:callercli
         """,
       platforms =['Any'],
-      install_requires = ['httplib2 >= 0.6.0', 'mozrunner >= 2.5.1'],
+      install_requires = ['httplib2 >= 0.6.0', 'mozrunner >= 2.5.1', 'mozcommitbuilder >= 0.3.8', 'simplejson >=2.1.6'],
       classifiers=['Development Status :: 4 - Beta',
                    'Environment :: Console',
                    'Intended Audience :: Developers',
