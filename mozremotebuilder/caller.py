@@ -21,7 +21,7 @@ class BuildCaller():
 
     def send(self):
         # Send data to server
-        self.sock.connect((self.host, self.port))
+        self.sock.connect((str(self.host), int(self.port)))
         self.sock.send(self.data + "\n")
 
     def getResponse(self):
