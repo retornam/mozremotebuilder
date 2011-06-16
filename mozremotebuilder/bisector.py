@@ -56,14 +56,18 @@ from mozrunner import Runner, FirefoxRunner
 from mozInstall import MozInstaller
 from mozInstall import rmdirRecursive
 
-#Condition Variable for knowing if a new try build has completed
+# Condition Variable for knowing if a new try build has completed
 cv = Condition()
+
+# Keep a queue of pulse messages as they come in.
+# We pop them off and check if they're relevant to us.
 lastCompleted = Queue()
 
 
 class BuildMonitor(PulseBuildMonitor, Thread):
     '''
-    This class needs to signal via condition variable that our build is done
+    This class signals via condition variable that our build is done
+    Uses Pulse (http://pulse.mozilla.org)
     '''
     def __init__(self, logger=None, port=8034, **kwargs):
         self.logger = logger
@@ -73,10 +77,12 @@ class BuildMonitor(PulseBuildMonitor, Thread):
         Thread.__init__(self)
 
     def onBuildComplete(self, builddata):
-        print "=============================="
-        print "DEBUG: "+ str(builddata['buildurl'])
-        print json.dumps(builddata)
-        print "=============================="
+        #Called when a pulse message comes in
+
+        #print "=============================="
+        #print "DEBUG: "+ str(builddata['buildurl'])
+        #print json.dumps(builddata)
+        #print "=============================="
 
         lastCompleted.put(str(builddata['buildurl']))
         cv.acquire()
@@ -85,6 +91,7 @@ class BuildMonitor(PulseBuildMonitor, Thread):
 
 
 class FFRunner():
+    # Calls FirefoxRunner with the right parameters
     def __init__(self, name="firefox", installDir=os.path.join(os.path.expanduser("~"),"remotebisectorapp")):
         self.name = name
         platform=get_platform()
@@ -126,7 +133,6 @@ class CommitBisector():
         self.done = 0
         self.host = host
         self.port = port
-        self.platform = "macosx64"
 
     def getChangesets(self):
         #Wrapper function: fetch pushlog if it doesn't exist, otherwise return existing log.
@@ -229,7 +235,7 @@ class CommitBisector():
                 # Handle edge case, if user's input has difference 0
                 self.bisectLog(verdict="bad")
             else:
-                caller = BuildCaller(host=self.host,port=self.port,data=self.nextChangeset(),platform=self.platform)
+                caller = BuildCaller(host=self.host,port=self.port,data=self.nextChangeset())
                 response = caller.getChangeset() #should return changeset of try commit
 
                 print "Waiting for " + response + " to show up in the build log..."
@@ -244,15 +250,7 @@ class CommitBisector():
 
                 print downloadURL + " is the URL we need to download from! yep."
 
-                """
-                TODO
-                1) Download URL
-                2) MozInstall install it
-                3) Run with MozRunner
-
-                4) Make platform detection automatic...
-                """
-                #First, make place for it to be downloaded
+                #Make download directory
                 downloadDirectory = os.path.join(os.path.expanduser("~"), "remotebisectorapp")
                 if not os.path.exists(downloadDirectory):
                     os.mkdir(downloadDirectory)
@@ -261,26 +259,28 @@ class CommitBisector():
                     shutil.rmtree(downloadDirectory)
                     os.mkdir(downloadDirectory)
 
-                #Second, download it
+                #Download it
                 downloadedFile = os.path.join(downloadDirectory,os.path.basename(downloadURL))
                 self.download(url=downloadURL,dest=downloadedFile)
 
-                #Third, call MozInstall on it
+                #Call MozInstall on it
                 try:
-                    #installer = MozInstaller(src = downloadedFile, dest = downloadDirectory,
-                    #                         branch = "1.9", productName = "firefox")
                     MozInstaller(src=downloadedFile, dest=downloadDirectory, dest_app="Mozilla.app")
                 except:
                     print "Install failed. Marking as bad."
                     self.bisectLog(verdict="bad")
+                    #This is the most graceful way I can think of dealing with build fail
                     continue
 
+
+                #Run the installed build.
                 try:
                     runner = FFRunner(installDir=downloadDirectory)
                     runner.run()
                 except:
                     print "Failed to start firefox. You can manually start it from the remotebisectorapp directory."
-                    #Graceful failure of the runner -- ask the user to run it themselves. Uhgh.
+                    #Graceful failure of the runner -- ask the user to run it themselves.
+                    #Turns out to be kind of good in a bunch of ways.
                     pass
 
                 verdict = ""
@@ -295,8 +295,11 @@ def cli():
                       metavar="YYYY-MM-DD", default=str(datetime.date.today()))
     parser.add_option("-g", "--good", dest="good",help="last known good date (or changeset, use -c flag)",
                       metavar="YYYY-MM-DD", default=None)
-    parser.add_option("-c", "--changesets", dest="byChangeset",help="set to 1 if you are using changesets instead of dates, default 0 (dates)",
-                      metavar="[0 or 1]", default=0)
+    parser.add_option("-c", "--changesets", dest="byChangeset",help="set to 1 if you are using changesets instead of dates, default 0 (dates)",metavar="[0 or 1]", default=0)
+    parser.add_option("-s", "--server", dest="hostname",help="hostname of mozbuildserver",
+                      metavar="somedomain.com", default="localhost")
+    parser.add_option("-p", "--port", dest="port",help="server port",
+                      metavar="9999", default=9999)
     (options, args) = parser.parse_args()
 
     if not options.good and options.byChangeset == 0:
@@ -304,7 +307,7 @@ def cli():
         print "No 'good' date specified, using " + options.good
 
 
-    bisector = CommitBisector(options.good, options.bad, byChangeset=options.byChangeset)
+    bisector = CommitBisector(options.good, options.bad, byChangeset=options.byChangeset, host=options.hostname, port=options.port)
     bisector.go()
 
 
